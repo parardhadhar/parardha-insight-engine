@@ -1,0 +1,6 @@
+venv/
+hf_cache/
+.env
+configuration.env
+__pycache__/
+ai_model/
