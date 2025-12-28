@@ -1,0 +1,6 @@
+streamlit
+llama-index
+llama-index-core
+llama-index-llms-groq
+llama-index-embeddings-huggingface
+python-dotenv
