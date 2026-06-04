@@ -1,12 +1,13 @@
 import streamlit as st
 import os
 import tempfile
-import shutil
-from huggingface_hub import snapshot_download
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader, Settings
-from llama_index.llms.groq import Groq
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.llms.nvidia import NVIDIA
+from llama_index.embeddings.nvidia import NVIDIAEmbedding
 
 # ---------------- PAGE CONFIG ----------------
 st.set_page_config(
@@ -57,12 +58,12 @@ with st.sidebar:
     st.markdown("---")
 
     st.markdown("#### 1️⃣ System Status")
-    api_key = os.getenv("GROQ_API_KEY")
+    api_key = os.getenv("NVIDIA_API_KEY")
 
     if api_key:
         st.success("✅ System Online")
     else:
-        st.error("⚠️ GROQ_API_KEY missing")
+        st.error("⚠️ NVIDIA_API_KEY missing")
         st.stop()
 
     st.markdown("---")
@@ -90,15 +91,11 @@ for msg in st.session_state.messages:
 @st.cache_resource(show_spinner=False)
 def load_models(_api_key):
     try:
-        llm = Groq(model="llama-3.3-70b-versatile", api_key=_api_key)
+        # LLM from NVIDIA NIM
+        llm = NVIDIA(model="meta/llama-3.1-70b-instruct", api_key=_api_key)
 
-        repo_id = "sentence-transformers/all-MiniLM-L6-v2"
-        model_path = "/tmp/ai_model"
-
-        if not os.path.exists(model_path):
-            snapshot_download(repo_id=repo_id, local_dir=model_path, local_dir_use_symlinks=False)
-
-        embed_model = HuggingFaceEmbedding(model_name=model_path)
+        # Embedding from NVIDIA NIM
+        embed_model = NVIDIAEmbedding(model="nvidia/nv-embedqa-e5-v5", api_key=_api_key)
 
         return llm, embed_model, None
     except Exception as e:
@@ -135,23 +132,35 @@ if prompt := st.chat_input("Ask something about the document..."):
 
             Settings.llm = llm
             Settings.embed_model = embed_model
+            Settings.chunk_size = 450
+            Settings.chunk_overlap = 50
 
-            if "vector_index" not in st.session_state:
-                st.session_state.vector_index = index_document(uploaded_file)
+            try:
+                if "vector_index" not in st.session_state:
+                    with st.status("Reading and indexing document...", expanded=True) as status:
+                        st.write("Initializing index...")
+                        st.session_state.vector_index = index_document(uploaded_file)
+                        status.update(label="Indexing complete!", state="complete", expanded=False)
 
-            engine = st.session_state.vector_index.as_query_engine()
-            response = engine.query(prompt)
+                engine = st.session_state.vector_index.as_query_engine()
+                response = engine.query(prompt)
 
-            st.markdown(response.response)
-            st.session_state.messages.append({"role": "assistant", "content": response.response})
+                st.markdown(response.response)
+                st.session_state.messages.append({"role": "assistant", "content": response.response})
+            except Exception as e:
+                st.error(f"An error occurred: {str(e)}")
+                if "vector_index" in st.session_state:
+                    del st.session_state.vector_index
 
 # ---------------- RAILWAY PORT BIND ----------------
-import subprocess
-
-if __name__ == "__main__":
-    port = os.getenv("PORT", "8501")
-    subprocess.run([
-        "streamlit", "run", "app.py",
-        "--server.port", port,
-        "--server.address", "0.0.0.0"
-    ])
+# This section is generally handled by the deployment platform (e.g., Railway/Heroku)
+# or by running 'streamlit run app.py' directly. 
+# Keeping it here but commented out to prevent recursive loops during local dev.
+# import subprocess
+# if __name__ == "__main__":
+#     port = os.getenv("PORT", "8501")
+#     subprocess.run([
+#         "streamlit", "run", "app.py",
+#         "--server.port", port,
+#         "--server.address", "0.0.0.0"
+#     ])

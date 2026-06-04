@@ -1,6 +1,6 @@
 streamlit
 llama-index
 llama-index-core
-llama-index-llms-groq
-llama-index-embeddings-huggingface
+llama-index-llms-nvidia
+llama-index-embeddings-nvidia
 python-dotenv
